@@ -426,18 +426,127 @@ export class TraceWebviewPanel {
       fill: rgba(56, 189, 248, 0.08);
     }
 
-    /* Quando selecionado via diagrama: atenua tudo que não for o par selecionado */
+    /* Estilos base de cartões de participantes */
+    rect.actor,
+    .actor rect {
+      fill: var(--panel-bg, #252526) !important;
+      stroke: var(--border-color, #3c3c3c) !important;
+    }
+
+    /* Quando selecionado via diagrama: atenua tudo que não for o par selecionado e suas velas */
     .diagram-dimmed line,
     .diagram-dimmed path,
     .diagram-dimmed text.messageText {
-      opacity: 0.14 !important;
+      opacity: 0.16 !important;
       transition: opacity 0.25s ease, stroke 0.25s ease;
     }
     .diagram-dimmed .actor,
     .diagram-dimmed .actor text,
-    .diagram-dimmed .actor rect,
+    .diagram-dimmed .actor circle,
     .diagram-dimmed .actor line {
-      opacity: 0.85 !important;
+      opacity: 0.35 !important;
+      transition: opacity 0.25s ease, stroke 0.25s ease, fill 0.25s ease;
+    }
+    .diagram-dimmed .actor rect,
+    .diagram-dimmed rect.actor {
+      fill: #18181b !important;
+      stroke: #3f3f46 !important;
+      opacity: 0.45 !important;
+    }
+
+    /* ======================================================== */
+    /* Destaque das Velas (Lifelines) e Participantes Conectados*/
+    /* ======================================================== */
+    /* Vela e Participante Chamador (Caller - api1): Azul Neon */
+    .diagram-dimmed line.hl-lifeline-caller {
+      stroke: var(--request-color) !important;
+      stroke-width: 3.5px !important;
+      stroke-dasharray: none !important;
+      filter: drop-shadow(0 0 8px var(--request-glow)) !important;
+      opacity: 1 !important;
+    }
+    .diagram-dimmed rect.hl-actor-box-caller {
+      stroke: var(--request-color) !important;
+      stroke-width: 2px !important;
+      fill: #0c4a6e !important;
+      filter: drop-shadow(0 0 8px var(--request-glow)) !important;
+      opacity: 1 !important;
+    }
+    .diagram-dimmed g.hl-actor-group-caller line,
+    .diagram-dimmed g.hl-actor-group-caller circle,
+    .diagram-dimmed g.hl-actor-group-caller path,
+    .diagram-dimmed .hl-actor-group-caller line,
+    .diagram-dimmed .hl-actor-group-caller circle,
+    .diagram-dimmed .hl-actor-group-caller path {
+      stroke: var(--request-color) !important;
+      opacity: 1 !important;
+    }
+
+    /* Vela e Participante Destino com Sucesso (Target - api2): Verde Neon */
+    .diagram-dimmed line.hl-lifeline-target-success {
+      stroke: var(--success-color) !important;
+      stroke-width: 3.5px !important;
+      stroke-dasharray: none !important;
+      filter: drop-shadow(0 0 8px var(--success-glow)) !important;
+      opacity: 1 !important;
+    }
+    .diagram-dimmed rect.hl-actor-box-target-success {
+      stroke: var(--success-color) !important;
+      stroke-width: 2px !important;
+      fill: #064e3b !important;
+      filter: drop-shadow(0 0 8px var(--success-glow)) !important;
+      opacity: 1 !important;
+    }
+    .diagram-dimmed g.hl-actor-group-target-success line,
+    .diagram-dimmed g.hl-actor-group-target-success circle,
+    .diagram-dimmed g.hl-actor-group-target-success path,
+    .diagram-dimmed .hl-actor-group-target-success line,
+    .diagram-dimmed .hl-actor-group-target-success circle,
+    .diagram-dimmed .hl-actor-group-target-success path {
+      stroke: var(--success-color) !important;
+      opacity: 1 !important;
+    }
+
+    /* Vela e Participante Destino com Erro (Target - api2): Vermelho Neon */
+    .diagram-dimmed line.hl-lifeline-target-error {
+      stroke: var(--error-color) !important;
+      stroke-width: 3.5px !important;
+      stroke-dasharray: none !important;
+      filter: drop-shadow(0 0 10px var(--error-glow)) !important;
+      opacity: 1 !important;
+    }
+    .diagram-dimmed rect.hl-actor-box-target-error {
+      stroke: var(--error-color) !important;
+      stroke-width: 2px !important;
+      fill: #7f1d1d !important;
+      filter: drop-shadow(0 0 10px var(--error-glow)) !important;
+      opacity: 1 !important;
+    }
+    .diagram-dimmed g.hl-actor-group-target-error line,
+    .diagram-dimmed g.hl-actor-group-target-error circle,
+    .diagram-dimmed g.hl-actor-group-target-error path,
+    .diagram-dimmed .hl-actor-group-target-error line,
+    .diagram-dimmed .hl-actor-group-target-error circle,
+    .diagram-dimmed .hl-actor-group-target-error path {
+      stroke: var(--error-color) !important;
+      opacity: 1 !important;
+    }
+
+    /* Legendas dos Cards Selecionados: Branco Puro, Cristalino e Sem Ofuscamento Neon */
+    .diagram-dimmed text.hl-actor-text-caller,
+    .diagram-dimmed g.hl-actor-group-caller text,
+    .diagram-dimmed .hl-actor-group-caller text,
+    .diagram-dimmed text.hl-actor-text-target-success,
+    .diagram-dimmed g.hl-actor-group-target-success text,
+    .diagram-dimmed .hl-actor-group-target-success text,
+    .diagram-dimmed text.hl-actor-text-target-error,
+    .diagram-dimmed g.hl-actor-group-target-error text,
+    .diagram-dimmed .hl-actor-group-target-error text {
+      fill: #ffffff !important;
+      stroke: none !important;
+      filter: none !important;
+      font-weight: 700 !important;
+      opacity: 1 !important;
     }
 
     /* 1. Request Selecionado: Azul Neon (Linha Sólida) */
@@ -738,6 +847,36 @@ export class TraceWebviewPanel {
       document.getElementById('detail-res-body').textContent = span.response && span.response.body ? span.response.body : '(Sem resposta)';
     }
 
+    const HL_SELECTORS = [
+      '.hl-request-line', '.hl-request-text',
+      '.hl-response-success-line', '.hl-response-success-text',
+      '.hl-response-error-line', '.hl-response-error-text',
+      '.hl-lifeline-caller', '.hl-lifeline-target-success', '.hl-lifeline-target-error',
+      '.hl-actor-box-caller', '.hl-actor-box-target-success', '.hl-actor-box-target-error',
+      '.hl-actor-text-caller', '.hl-actor-text-target-success', '.hl-actor-text-target-error',
+      '.hl-actor-group-caller', '.hl-actor-group-target-success', '.hl-actor-group-target-error',
+      '.svg-pair-focus-box'
+    ];
+
+    function clearSvgHighlights(svg) {
+      if (!svg) return;
+      svg.querySelectorAll(HL_SELECTORS.join(', ')).forEach(el => {
+        if (el.classList.contains('svg-pair-focus-box')) {
+          el.remove();
+        } else {
+          el.classList.remove(
+            'hl-request-line', 'hl-request-text',
+            'hl-response-success-line', 'hl-response-success-text',
+            'hl-response-error-line', 'hl-response-error-text',
+            'hl-lifeline-caller', 'hl-lifeline-target-success', 'hl-lifeline-target-error',
+            'hl-actor-box-caller', 'hl-actor-box-target-success', 'hl-actor-box-target-error',
+            'hl-actor-text-caller', 'hl-actor-text-target-success', 'hl-actor-text-target-error',
+            'hl-actor-group-caller', 'hl-actor-group-target-success', 'hl-actor-group-target-error'
+          );
+        }
+      });
+    }
+
     function clearSelection() {
       currentSpan = null;
       renderSpansList();
@@ -746,14 +885,8 @@ export class TraceWebviewPanel {
       const svg = canvas.querySelector('svg');
       if (svg) {
         svg.classList.remove('diagram-dimmed');
-        svg.querySelectorAll('.hl-request-line, .hl-request-text, .hl-response-success-line, .hl-response-success-text, .hl-response-error-line, .hl-response-error-text, .svg-pair-focus-box').forEach(el => {
-          el.classList.remove(
-            'hl-request-line', 'hl-request-text',
-            'hl-response-success-line', 'hl-response-success-text',
-            'hl-response-error-line', 'hl-response-error-text'
-          );
-          if (el.classList.contains('svg-pair-focus-box')) el.remove();
-        });
+        clearSvgHighlights(svg);
+        normalizeAllLifelines(svg);
       }
     }
 
@@ -773,10 +906,108 @@ export class TraceWebviewPanel {
       }, 50);
     }
 
-        // Configura áreas clicáveis no diagrama usando os identificadores numerados únicos (1), (2)...
+    // Helper para obter a base inferior do card superior na coordenada X dada
+    function getTopCardBottom(svg, lineX) {
+      let cardBottom = 0;
+      const rects = Array.from(svg.querySelectorAll('rect'));
+      rects.forEach(r => {
+        if (r.classList.contains('svg-pair-focus-box') || r.classList.contains('clickable-hitbox')) return;
+        try {
+          const box = r.getBBox();
+          const cx = box.x + box.width / 2;
+          if (Math.abs(cx - lineX) <= 35 && box.y < 160) {
+            cardBottom = Math.max(cardBottom, box.y + box.height);
+          }
+        } catch {}
+      });
+
+      const actors = Array.from(svg.querySelectorAll('g.actor, .actor'));
+      actors.forEach(g => {
+        try {
+          const box = g.getBBox();
+          const cx = box.x + box.width / 2;
+          if (Math.abs(cx - lineX) <= 35 && box.y < 160) {
+            cardBottom = Math.max(cardBottom, box.y + box.height);
+          }
+        } catch {}
+      });
+
+      return cardBottom;
+    }
+
+    // Helper para obter o topo do card inferior na coordenada X dada
+    function getBottomCardTop(svg, lineX) {
+      let cardTop = Infinity;
+      const rects = Array.from(svg.querySelectorAll('rect'));
+      rects.forEach(r => {
+        if (r.classList.contains('svg-pair-focus-box') || r.classList.contains('clickable-hitbox')) return;
+        try {
+          const box = r.getBBox();
+          const cx = box.x + box.width / 2;
+          if (Math.abs(cx - lineX) <= 35 && box.y >= 160) {
+            cardTop = Math.min(cardTop, box.y);
+          }
+        } catch {}
+      });
+
+      const actors = Array.from(svg.querySelectorAll('g.actor, .actor'));
+      actors.forEach(g => {
+        try {
+          const box = g.getBBox();
+          const cx = box.x + box.width / 2;
+          if (Math.abs(cx - lineX) <= 35 && box.y >= 160) {
+            cardTop = Math.min(cardTop, box.y);
+          }
+        } catch {}
+      });
+
+      return cardTop === Infinity ? 0 : cardTop;
+    }
+
+    // Normaliza TODAS as linhas verticais (velas) de todos os participantes para começarem abaixo do card superior e terminarem acima do card inferior
+    function normalizeAllLifelines(svg) {
+      if (!svg) return;
+
+      // Garante que em TODOS os cards (superiores e inferiores), o texto da legenda fique SEMPRE por cima do rect
+      svg.querySelectorAll('g.actor, .actor').forEach(grp => {
+        const txt = grp.querySelector('text');
+        if (txt) {
+          grp.appendChild(txt);
+        }
+      });
+
+      const allLines = Array.from(svg.querySelectorAll('line'));
+      allLines.forEach(l => {
+        if (l.classList.contains('messageLine0') || l.classList.contains('messageLine1') || l.classList.contains('hl-request-line') || l.classList.contains('hl-response-success-line') || l.classList.contains('hl-response-error-line')) return;
+
+        const lx1 = parseFloat(l.getAttribute('x1') || '0');
+        const lx2 = parseFloat(l.getAttribute('x2') || '0');
+        const ly1 = parseFloat(l.getAttribute('y1') || '0');
+        const ly2 = parseFloat(l.getAttribute('y2') || '0');
+        const isVertical = Math.abs(lx1 - lx2) <= 3 && Math.abs(ly2 - ly1) > 30;
+        const isActorLine = (l.getAttribute('class') || '').includes('actor-line') || isVertical;
+
+        if (isActorLine) {
+          const topCardBottom = getTopCardBottom(svg, lx1);
+          if (topCardBottom > 0 && ly1 < topCardBottom) {
+            l.setAttribute('y1', String(topCardBottom + 1));
+          }
+
+          const bottomCardTop = getBottomCardTop(svg, lx1);
+          if (bottomCardTop > 0 && ly2 > bottomCardTop) {
+            l.setAttribute('y2', String(bottomCardTop - 1));
+          }
+        }
+      });
+    }
+
+    // Configura áreas clicáveis no diagrama usando os identificadores numerados únicos (1), (2)...
     function setupDiagramClickInteractivity() {
       const svg = canvas.querySelector('svg');
       if (!svg) return;
+
+      // Normaliza todas as velas de todos os serviços (selecionados e não selecionados)
+      normalizeAllLifelines(svg);
 
       const allTexts = Array.from(svg.querySelectorAll('text'));
       const reqLines = Array.from(svg.querySelectorAll('.messageLine0'));
@@ -867,36 +1098,41 @@ export class TraceWebviewPanel {
       });
     }
 
-    // Isola e destaca rigorosamente APENAS o request da chamada clicada e o seu response correspondente
+    // Isola e destaca rigorosamente o request, o response e as VELAS dos serviços conectados (api1 -> api2)
     function highlightSingleCall(span, spanIndex) {
       const svg = canvas.querySelector('svg');
       if (!svg) return;
 
-      // 1. Atenua todo o resto do diagrama
+      // 1. Atenua todo o resto do diagrama e remove destaques antigos
       svg.classList.add('diagram-dimmed');
-      svg.querySelectorAll('.hl-request-line, .hl-request-text, .hl-response-success-line, .hl-response-success-text, .hl-response-error-line, .hl-response-error-text, .svg-pair-focus-box').forEach(el => {
-        el.classList.remove(
-          'hl-request-line', 'hl-request-text',
-          'hl-response-success-line', 'hl-response-success-text',
-          'hl-response-error-line', 'hl-response-error-text'
-        );
-        if (el.classList.contains('svg-pair-focus-box')) el.remove();
-      });
+      clearSvgHighlights(svg);
+      normalizeAllLifelines(svg);
 
       const allTexts = Array.from(svg.querySelectorAll('text'));
       const reqLines = Array.from(svg.querySelectorAll('.messageLine0'));
       const resLines = Array.from(svg.querySelectorAll('.messageLine1'));
 
-      const reqMarker = \`(\${spanIndex + 1})\`;
-      const nextReqMarker = \`(\${spanIndex + 2})\`;
+      const reqMarker = '(' + (spanIndex + 1) + ')';
+      const nextReqMarker = '(' + (spanIndex + 2) + ')';
 
       // 2. Localiza com exatidão o texto único do REQUEST selecionado
       const reqTextEl = allTexts.find(t => (t.textContent || '').includes(reqMarker));
       if (!reqTextEl) return;
 
-      const reqBbox = reqTextEl.getBBox();
+      let reqBbox;
+      try {
+        reqBbox = reqTextEl.getBBox();
+      } catch {
+        return;
+      }
+
       const nextReqTextEl = allTexts.find(t => (t.textContent || '').includes(nextReqMarker));
-      const nextReqY = nextReqTextEl ? nextReqTextEl.getBBox().y : Infinity;
+      let nextReqY = Infinity;
+      if (nextReqTextEl) {
+        try {
+          nextReqY = nextReqTextEl.getBBox().y;
+        } catch {}
+      }
 
       let minX = reqBbox.x, minY = reqBbox.y, maxX = reqBbox.x + reqBbox.width, maxY = reqBbox.y + reqBbox.height;
 
@@ -904,62 +1140,192 @@ export class TraceWebviewPanel {
       reqTextEl.classList.add('hl-request-text');
 
       const targetReqLine = reqLines.find(l => {
-        const y = l.getBBox().y;
-        return y >= reqBbox.y - 8 && y < nextReqY;
+        try {
+          const y = l.getBBox().y;
+          return y >= reqBbox.y - 8 && y < nextReqY;
+        } catch {
+          return false;
+        }
       }) || reqLines[spanIndex];
+
+      let callerX = null;
+      let targetX = null;
 
       if (targetReqLine) {
         targetReqLine.classList.add('hl-request-line');
-        const lBbox = targetReqLine.getBBox();
-        minX = Math.min(minX, lBbox.x);
-        maxX = Math.max(maxX, lBbox.x + lBbox.width);
-        minY = Math.min(minY, lBbox.y);
-        maxY = Math.max(maxY, lBbox.y + lBbox.height);
+        try {
+          const lBbox = targetReqLine.getBBox();
+          minX = Math.min(minX, lBbox.x);
+          maxX = Math.max(maxX, lBbox.x + lBbox.width);
+          minY = Math.min(minY, lBbox.y);
+          maxY = Math.max(maxY, lBbox.y + lBbox.height);
+
+          const x1 = parseFloat(targetReqLine.getAttribute('x1') || '');
+          const x2 = parseFloat(targetReqLine.getAttribute('x2') || '');
+          if (!isNaN(x1) && !isNaN(x2)) {
+            callerX = x1;
+            targetX = x2;
+          } else {
+            callerX = lBbox.x;
+            targetX = lBbox.x + lBbox.width;
+          }
+        } catch {}
       }
+
+      const isError = span.response && span.response.statusCode >= 400;
 
       // B. Localiza o RESPONSE exclusivo DA MESMA chamada selecionada
       if (span.response) {
-        const isError = span.response.statusCode >= 400;
-
-        // Texto do retorno fica estritamente entre o request atual e o próximo request
         const resTextEl = allTexts.find(t => {
-          const y = t.getBBox().y;
-          return y > reqBbox.y + 10 && y < nextReqY;
+          try {
+            const y = t.getBBox().y;
+            return y > reqBbox.y + 10 && y < nextReqY;
+          } catch {
+            return false;
+          }
         });
 
         if (resTextEl) {
           resTextEl.classList.add(isError ? 'hl-response-error-text' : 'hl-response-success-text');
-          const resBbox = resTextEl.getBBox();
-          minX = Math.min(minX, resBbox.x);
-          maxX = Math.max(maxX, resBbox.x + resBbox.width);
-          minY = Math.min(minY, resBbox.y);
-          maxY = Math.max(maxY, resBbox.y + resBbox.height);
+          try {
+            const resBbox = resTextEl.getBBox();
+            minX = Math.min(minX, resBbox.x);
+            maxX = Math.max(maxX, resBbox.x + resBbox.width);
+            minY = Math.min(minY, resBbox.y);
+            maxY = Math.max(maxY, resBbox.y + resBbox.height);
+          } catch {}
         }
 
-        // Linha tracejada do retorno fica estritamente abaixo do request atual e antes do próximo request
-        const startY = targetReqLine ? targetReqLine.getBBox().y : reqBbox.y;
+        const startY = targetReqLine ? (targetReqLine.getBBox ? targetReqLine.getBBox().y : reqBbox.y) : reqBbox.y;
         const targetResLine = resLines.find(l => {
-          const y = l.getBBox().y;
-          return y > startY && y < nextReqY;
+          try {
+            const y = l.getBBox().y;
+            return y > startY && y < nextReqY;
+          } catch {
+            return false;
+          }
         }) || resLines[spanIndex];
 
         if (targetResLine) {
           targetResLine.classList.add(isError ? 'hl-response-error-line' : 'hl-response-success-line');
-          const rBbox = targetResLine.getBBox();
-          minX = Math.min(minX, rBbox.x);
-          maxX = Math.max(maxX, rBbox.x + rBbox.width);
-          minY = Math.min(minY, rBbox.y);
-          maxY = Math.max(maxY, rBbox.y + rBbox.height);
+          try {
+            const rBbox = targetResLine.getBBox();
+            minX = Math.min(minX, rBbox.x);
+            maxX = Math.max(maxX, rBbox.x + rBbox.width);
+            minY = Math.min(minY, rBbox.y);
+            maxY = Math.max(maxY, rBbox.y + rBbox.height);
+
+            if (callerX === null || targetX === null) {
+              const x1 = parseFloat(targetResLine.getAttribute('x1') || '');
+              const x2 = parseFloat(targetResLine.getAttribute('x2') || '');
+              if (!isNaN(x1) && !isNaN(x2)) {
+                if (targetX === null) targetX = x1;
+                if (callerX === null) callerX = x2;
+              }
+            }
+          } catch {}
         }
       }
 
+      // C. DESTACA AS VELAS (LIFELINES) E OS PARTICIPANTES CONECTADOS (SUPERIORES E INFERIORES)
+      if (callerX !== null || targetX !== null) {
+        // 1. Destaca as linhas verticais (velas)
+        const allLines = Array.from(svg.querySelectorAll('line'));
+        allLines.forEach(l => {
+          if (l.classList.contains('messageLine0') || l.classList.contains('messageLine1') || l.classList.contains('hl-request-line') || l.classList.contains('hl-response-success-line') || l.classList.contains('hl-response-error-line')) return;
+
+          const lx1 = parseFloat(l.getAttribute('x1') || '0');
+          const lx2 = parseFloat(l.getAttribute('x2') || '0');
+          const ly1 = parseFloat(l.getAttribute('y1') || '0');
+          const ly2 = parseFloat(l.getAttribute('y2') || '0');
+          const isVertical = Math.abs(lx1 - lx2) <= 3 && Math.abs(ly2 - ly1) > 30;
+          const isActorLine = (l.getAttribute('class') || '').includes('actor-line') || isVertical;
+
+          if (isActorLine) {
+            const isCaller = callerX !== null && Math.abs(lx1 - callerX) <= 14;
+            const isTarget = targetX !== null && Math.abs(lx1 - targetX) <= 14;
+
+            if (isCaller) {
+              l.classList.add('hl-lifeline-caller');
+            } else if (isTarget) {
+              l.classList.add(isError ? 'hl-lifeline-target-error' : 'hl-lifeline-target-success');
+            }
+          }
+        });
+
+        // 2. Destaca todos os grupos de atores (tanto no topo quanto no rodapé inferior)
+        const allActorGroups = Array.from(svg.querySelectorAll('g.actor, .actor'));
+        allActorGroups.forEach(grp => {
+          try {
+            const gbox = grp.getBBox();
+            const gxCenter = gbox.x + gbox.width / 2;
+            const isCaller = callerX !== null && Math.abs(gxCenter - callerX) <= 35;
+            const isTarget = targetX !== null && Math.abs(gxCenter - targetX) <= 35;
+
+            if (isCaller) {
+              grp.classList.add('hl-actor-group-caller');
+            } else if (isTarget) {
+              grp.classList.add(isError ? 'hl-actor-group-target-error' : 'hl-actor-group-target-success');
+            }
+
+            // Destaca e preserva a visibilidade da legenda (texto) de cada card
+            const txt = grp.querySelector('text');
+            if (txt) {
+              grp.appendChild(txt); // Mantém o texto SEMPRE na frente do retângulo
+              if (isCaller) {
+                txt.classList.add('hl-actor-text-caller');
+              } else if (isTarget) {
+                txt.classList.add(isError ? 'hl-actor-text-target-error' : 'hl-actor-text-target-success');
+              }
+            }
+
+            const rect = grp.querySelector('rect');
+            if (rect) {
+              if (isCaller) {
+                rect.classList.add('hl-actor-box-caller');
+              } else if (isTarget) {
+                rect.classList.add(isError ? 'hl-actor-box-target-error' : 'hl-actor-box-target-success');
+              }
+            }
+          } catch {}
+        });
+
+        // 3. Fallback adicional para retângulos e textos soltos fora de grupos
+        const allRects = Array.from(svg.querySelectorAll('rect'));
+        allRects.forEach(rect => {
+          if (rect.classList.contains('svg-pair-focus-box') || rect.classList.contains('clickable-hitbox')) return;
+          try {
+            const rbox = rect.getBBox();
+            const rxCenter = rbox.x + rbox.width / 2;
+            if (callerX !== null && Math.abs(rxCenter - callerX) <= 25) {
+              rect.classList.add('hl-actor-box-caller');
+            } else if (targetX !== null && Math.abs(rxCenter - targetX) <= 25) {
+              rect.classList.add(isError ? 'hl-actor-box-target-error' : 'hl-actor-box-target-success');
+            }
+          } catch {}
+        });
+
+        allTexts.forEach(txt => {
+          if (txt.classList.contains('messageText') || txt.classList.contains('clickable-call-line')) return;
+          try {
+            const tbox = txt.getBBox();
+            const txCenter = tbox.x + tbox.width / 2;
+            if (callerX !== null && Math.abs(txCenter - callerX) <= 35) {
+              txt.classList.add('hl-actor-text-caller');
+            } else if (targetX !== null && Math.abs(txCenter - targetX) <= 35) {
+              txt.classList.add(isError ? 'hl-actor-text-target-error' : 'hl-actor-text-target-success');
+            }
+          } catch {}
+        });
+      }
+
       // Moldura sutil envolvendo apenas o par exato selecionado
-      if (minX !== Infinity) {
+      if (minX !== Infinity && isFinite(minX) && isFinite(maxX)) {
         const focusBox = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
         focusBox.setAttribute('x', String(minX - 16));
         focusBox.setAttribute('y', String(minY - 12));
-        focusBox.setAttribute('width', String((maxX - minX) + 32));
-        focusBox.setAttribute('height', String((maxY - minY) + 26));
+        focusBox.setAttribute('width', String(Math.max(10, (maxX - minX) + 32)));
+        focusBox.setAttribute('height', String(Math.max(10, (maxY - minY) + 26)));
         focusBox.setAttribute('class', 'svg-pair-focus-box');
         svg.appendChild(focusBox);
       }
