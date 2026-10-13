@@ -2,18 +2,18 @@
   "name": "flow-tracer",
   "displayName": "FlowTracer - API Sequence Visualizer",
   "description": "Intercepta, mapeia e visualiza fluxos de chamadas HTTP distribuídas em diagramas de sequência.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "publisher": "observability-tools",
   "license": "MIT",
   "icon": "images/icon.png",
   "repository": {
     "type": "git",
-    "url": "https://github.com/flowtracer/flow-tracer"
+    "url": "https://github.com/cristianpaulo4/flow-tracer"
   },
   "bugs": {
-    "url": "https://github.com/flowtracer/flow-tracer/issues"
+    "url": "https://github.com/cristianpaulo4/flow-tracer/issues"
   },
-  "homepage": "https://github.com/flowtracer/flow-tracer#readme",
+  "homepage": "https://github.com/cristianpaulo4/flow-tracer#readme",
   "keywords": [
     "tracing",
     "sequence-diagram",
