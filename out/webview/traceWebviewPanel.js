@@ -190,19 +190,26 @@ class TraceWebviewPanel {
     body {
       font-family: var(--vscode-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif);
       margin: 0;
-      padding: 1rem;
+      padding: 0.75rem;
       background-color: var(--bg-color);
       color: var(--vscode-editor-foreground, #cccccc);
       display: flex;
       flex-direction: row;
-      gap: 1.25rem;
+      gap: 0;
       height: 100vh;
       box-sizing: border-box;
       overflow: hidden;
-      user-select: none;
+    }
+    body.resizing {
+      cursor: col-resize !important;
+      user-select: none !important;
+    }
+    body.resizing * {
+      user-select: none !important;
     }
     #diagram-wrapper {
-      flex: 1;
+      flex: 1 1 0%;
+      min-width: 280px;
       display: flex;
       flex-direction: column;
       position: relative;
@@ -211,6 +218,32 @@ class TraceWebviewPanel {
       background: var(--panel-bg);
       box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
       overflow: hidden;
+    }
+    .resizer-sash {
+      width: 10px;
+      margin: 0 2px;
+      cursor: col-resize;
+      position: relative;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+      flex-shrink: 0;
+      transition: background 0.15s ease;
+    }
+    .resizer-sash::before {
+      content: '';
+      width: 2px;
+      height: 100%;
+      background: transparent;
+      border-radius: 2px;
+      transition: background 0.2s ease, width 0.2s ease;
+    }
+    .resizer-sash:hover::before,
+    body.resizing .resizer-sash::before {
+      background: var(--vscode-focusBorder, #007acc);
+      width: 4px;
+      box-shadow: 0 0 6px var(--vscode-focusBorder, rgba(0, 122, 204, 0.6));
     }
     .diagram-header {
       display: flex;
@@ -285,6 +318,9 @@ class TraceWebviewPanel {
     }
     #details-panel {
       width: 440px;
+      min-width: 260px;
+      max-width: calc(100vw - 360px);
+      flex-shrink: 0;
       overflow-y: auto;
       border: 1px solid var(--border-color);
       border-radius: 8px;
@@ -490,6 +526,8 @@ class TraceWebviewPanel {
     </div>
   </div>
 
+  <div id="resizer" class="resizer-sash" title="Arrastar para redimensionar (Duplo clique para redefinir largura)"></div>
+
   <div id="details-panel">
     <h3>Cadeia de Requisições (${sortedSpans.length})</h3>
     <small style="opacity:0.75; margin-bottom: 6px;">Clique numa requisição no diagrama para isolar <strong>Request (Azul)</strong> e <strong>Response (Verde/Vermelho)</strong>. Clique fora para deselecionar:</small>
@@ -576,6 +614,9 @@ class TraceWebviewPanel {
     // Clique no canvas fora das setas: deseleciona e restaura o diagrama
     viewport.addEventListener('click', (e) => {
       if (hasMoved) return; // Se foi arraste/pan, não deseleciona
+      if (e.target && e.target.closest && (e.target.closest('.clickable-hitbox') || e.target.closest('.clickable-call-line') || e.target.closest('.span-list-item'))) {
+        return;
+      }
       clearSelection();
     });
 
@@ -779,7 +820,7 @@ class TraceWebviewPanel {
 
         const clickHandler = (e) => {
           e.stopPropagation();
-          selectSpan(span, index, false);
+          selectSpan(span, index);
         };
 
         reqTextEl.classList.add('clickable-call-line');
@@ -825,7 +866,7 @@ class TraceWebviewPanel {
         hitbox.setAttribute('class', 'clickable-hitbox');
         hitbox.setAttribute('title', \`Clique para selecionar: \${reqMarker} \${span.request.method}\`);
         hitbox.onclick = clickHandler;
-        svg.insertBefore(hitbox, svg.firstChild);
+        svg.appendChild(hitbox);
       });
     }
 
@@ -927,18 +968,128 @@ class TraceWebviewPanel {
       }
     }
 
-        document.getElementById('copy-curl-btn').onclick = () => {
-      if (currentSpan) {
-        vscode.postMessage({ command: 'copyCurl', spanId: currentSpan.id });
-      }
-    };
+    const copyBtn = document.getElementById('copy-curl-btn');
+    if (copyBtn) {
+      copyBtn.onclick = () => {
+        if (currentSpan) {
+          vscode.postMessage({ command: 'copyCurl', spanId: currentSpan.id });
+        }
+      };
+    }
 
-    setTimeout(() => {
-      renderSpansList();
-      setupDiagramClickInteractivity();
-      clearSelection();
-      updateTransform();
-    }, 600);
+    // -----------------------------------------------------------
+    // Redimensionamento dos Painéis (Splitter / Resizer Nativo)
+    // -----------------------------------------------------------
+    const resizer = document.getElementById('resizer');
+    const detailsPanel = document.getElementById('details-panel');
+    const DEFAULT_DETAILS_WIDTH = 440;
+    const MIN_DETAILS_WIDTH = 260;
+
+    let isResizing = false;
+    let resizeStartX = 0;
+    let resizeStartWidth = DEFAULT_DETAILS_WIDTH;
+
+    function applyDetailsWidth(width) {
+      if (!detailsPanel) return width;
+      const maxWidth = Math.max(MIN_DETAILS_WIDTH, window.innerWidth - 300);
+      const clampedWidth = Math.min(Math.max(width, MIN_DETAILS_WIDTH), maxWidth);
+      detailsPanel.style.width = clampedWidth + 'px';
+      return clampedWidth;
+    }
+
+    function saveDetailsWidth(width) {
+      try {
+        const state = vscode.getState() || {};
+        state.detailsWidth = width;
+        vscode.setState(state);
+      } catch {}
+    }
+
+    // Restaurar largura salva pelo usuário
+    try {
+      const state = vscode.getState() || {};
+      if (state.detailsWidth && typeof state.detailsWidth === 'number') {
+        applyDetailsWidth(state.detailsWidth);
+      }
+    } catch {}
+
+    if (resizer && detailsPanel) {
+      resizer.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        resizeStartX = e.clientX;
+        resizeStartWidth = detailsPanel.getBoundingClientRect().width;
+        document.body.classList.add('resizing');
+        e.preventDefault();
+      });
+
+      window.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+        const deltaX = resizeStartX - e.clientX;
+        applyDetailsWidth(resizeStartWidth + deltaX);
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (isResizing) {
+          isResizing = false;
+          document.body.classList.remove('resizing');
+          saveDetailsWidth(detailsPanel.getBoundingClientRect().width);
+        }
+      });
+
+      // Duplo clique restaura para a largura padrão
+      resizer.addEventListener('dblclick', () => {
+        const newWidth = applyDetailsWidth(DEFAULT_DETAILS_WIDTH);
+        saveDetailsWidth(newWidth);
+      });
+
+      // Suporte a gestos touch
+      resizer.addEventListener('touchstart', (e) => {
+        if (e.touches.length === 1) {
+          isResizing = true;
+          resizeStartX = e.touches[0].clientX;
+          resizeStartWidth = detailsPanel.getBoundingClientRect().width;
+          document.body.classList.add('resizing');
+        }
+      }, { passive: true });
+
+      window.addEventListener('touchmove', (e) => {
+        if (!isResizing || e.touches.length !== 1) return;
+        const deltaX = resizeStartX - e.touches[0].clientX;
+        applyDetailsWidth(resizeStartWidth + deltaX);
+      }, { passive: true });
+
+      window.addEventListener('touchend', () => {
+        if (isResizing) {
+          isResizing = false;
+          document.body.classList.remove('resizing');
+          saveDetailsWidth(detailsPanel.getBoundingClientRect().width);
+        }
+      });
+    }
+
+    window.addEventListener('resize', () => {
+      if (detailsPanel) {
+        applyDetailsWidth(detailsPanel.getBoundingClientRect().width);
+      }
+    });
+
+    // Inicialização da lista imediatamente para nunca travar a interface
+    renderSpansList();
+    updateTransform();
+
+    // Ativação da interatividade no diagrama assim que o Mermaid renderizar o SVG
+    let initAttempts = 0;
+    function tryInitDiagramInteractivity() {
+      const svg = canvas.querySelector('svg');
+      if (svg) {
+        setupDiagramClickInteractivity();
+        clearSelection();
+      } else if (initAttempts < 30) {
+        initAttempts++;
+        setTimeout(tryInitDiagramInteractivity, 100);
+      }
+    }
+    setTimeout(tryInitDiagramInteractivity, 150);
   </script>
 </body>
 </html>`;
