@@ -426,7 +426,19 @@ export class TraceWebviewPanel {
       fill: rgba(56, 189, 248, 0.08);
     }
 
-    /* Estilos base de cartões de participantes */
+    /* Estilos base e hover de cartões de participantes e velas */
+    g.actor,
+    .actor,
+    line.actor-line {
+      cursor: pointer;
+    }
+    g.actor:hover rect,
+    .actor:hover rect {
+      stroke: var(--request-color) !important;
+      stroke-width: 2px !important;
+      filter: drop-shadow(0 0 6px var(--request-glow)) !important;
+      transition: all 0.2s ease;
+    }
     rect.actor,
     .actor rect {
       fill: var(--panel-bg, #252526) !important;
@@ -659,12 +671,41 @@ export class TraceWebviewPanel {
       <h4 style="margin-top: 10px; margin-bottom: 4px;">Response Body:</h4>
       <pre id="detail-res-body"></pre>
     </div>
+
+    <div id="service-summary-details" style="display:none;">
+      <hr style="border: 0; border-top: 1px solid var(--border-color); margin: 12px 0;"/>
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+        <h4 style="margin: 0;" id="service-summary-title">🏢 Visão do Serviço</h4>
+        <span class="badge badge-get" id="service-summary-badge">Em Foco</span>
+      </div>
+
+      <div class="meta-row"><strong>Serviço:</strong> <span id="service-name-text" style="font-weight:bold;"></span></div>
+      <div class="meta-row"><strong>Total de Requisições:</strong> <span id="service-total-calls"></span></div>
+      <div class="meta-row"><strong>Origem (Enviadas):</strong> <span id="service-outbound-calls"></span></div>
+      <div class="meta-row"><strong>Destino (Recebidas):</strong> <span id="service-inbound-calls"></span></div>
+      <div class="meta-row"><strong>Falhas / Erros:</strong> <span id="service-error-calls"></span></div>
+
+      <div style="font-size:0.8rem; opacity:0.8; margin-top:8px; line-height: 1.4; padding: 6px 8px; background: rgba(56, 189, 248, 0.08); border-radius: 4px;">
+        💡 Todas as requisições enviadas e recebidas por este serviço estão destacadas no diagrama e na lista acima.
+      </div>
+    </div>
   </div>
 
   <script>
     const vscode = acquireVsCodeApi();
     const spans = ${spansJson};
     let currentSpan = null;
+    let selectedServiceName = null;
+
+    function normalizeServiceName(name) {
+      const clean = (name || '').trim();
+      const lower = clean.toLowerCase();
+      if (!lower || lower === 'client') return 'Client';
+      if (lower.includes('localhost') || lower.includes('127.0.0.1') || lower.includes('service (')) {
+        return 'API (localhost:3000)';
+      }
+      return clean.replace(/:[0-9]+$/, '').trim();
+    }
 
     // -----------------------------------------------------------
     // Pan e Zoom Amplo do Canvas (Suporta até 800% de Zoom)
@@ -720,7 +761,14 @@ export class TraceWebviewPanel {
     // Clique no canvas fora das setas: deseleciona e restaura o diagrama
     viewport.addEventListener('click', (e) => {
       if (hasMoved) return; // Se foi arraste/pan, não deseleciona
-      if (e.target && e.target.closest && (e.target.closest('.clickable-hitbox') || e.target.closest('.clickable-call-line') || e.target.closest('.span-list-item'))) {
+      if (e.target && e.target.closest && (
+        e.target.closest('.clickable-hitbox') ||
+        e.target.closest('.clickable-call-line') ||
+        e.target.closest('g.actor, .actor') ||
+        e.target.closest('.span-list-item') ||
+        e.target.closest('line.actor-line') ||
+        e.target.closest('rect.actor, text.actor')
+      )) {
         return;
       }
       clearSelection();
@@ -791,10 +839,14 @@ export class TraceWebviewPanel {
       spans.forEach((span, index) => {
         const item = document.createElement('div');
         const isSelected = currentSpan && currentSpan.id === span.id;
+        const isConnectedToSelectedService = selectedServiceName && (
+          normalizeServiceName(span.callerService) === selectedServiceName ||
+          normalizeServiceName(span.targetService) === selectedServiceName
+        );
         const isError = span.response && span.response.statusCode >= 400;
 
         item.className = 'span-list-item' + 
-          (isSelected ? ' selected' : '') + 
+          (isSelected || isConnectedToSelectedService ? ' selected' : '') + 
           (isError ? ' has-error' : '');
 
         let path = span.request.url;
@@ -879,8 +931,11 @@ export class TraceWebviewPanel {
 
     function clearSelection() {
       currentSpan = null;
+      selectedServiceName = null;
       renderSpansList();
       detailsEl.style.display = 'none';
+      const serviceDetailsEl = document.getElementById('service-summary-details');
+      if (serviceDetailsEl) serviceDetailsEl.style.display = 'none';
 
       const svg = canvas.querySelector('svg');
       if (svg) {
@@ -893,6 +948,10 @@ export class TraceWebviewPanel {
     // Seleção Unificada Bidirecional: tanto da lista para o diagrama quanto do diagrama para a lista
     function selectSpan(span, spanIndex) {
       currentSpan = span;
+      selectedServiceName = null;
+      const serviceDetailsEl = document.getElementById('service-summary-details');
+      if (serviceDetailsEl) serviceDetailsEl.style.display = 'none';
+
       renderSpansList();
       showDetails(span);
       highlightSingleCall(span, spanIndex);
@@ -902,6 +961,55 @@ export class TraceWebviewPanel {
         const selectedItemEl = spansListEl.querySelector('.span-list-item.selected');
         if (selectedItemEl) {
           selectedItemEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+      }, 50);
+    }
+
+    function showServiceSummary(serviceName) {
+      detailsEl.style.display = 'none';
+      const serviceDetailsEl = document.getElementById('service-summary-details');
+      if (!serviceDetailsEl) return;
+
+      const connectedSpans = spans.filter(s => 
+        normalizeServiceName(s.callerService) === serviceName || 
+        normalizeServiceName(s.targetService) === serviceName
+      );
+
+      const outboundSpans = spans.filter(s => normalizeServiceName(s.callerService) === serviceName);
+      const inboundSpans = spans.filter(s => normalizeServiceName(s.targetService) === serviceName);
+      const errorSpans = connectedSpans.filter(s => s.response && s.response.statusCode >= 400);
+
+      document.getElementById('service-name-text').textContent = serviceName;
+      document.getElementById('service-total-calls').textContent = connectedSpans.length + ' requisição(ões)';
+      document.getElementById('service-outbound-calls').textContent = outboundSpans.length + ' chamada(s)';
+      document.getElementById('service-inbound-calls').textContent = inboundSpans.length + ' chamada(s)';
+      document.getElementById('service-error-calls').textContent = errorSpans.length > 0 
+        ? (errorSpans.length + ' com falha ❌') 
+        : '0 (todas com sucesso ✅)';
+
+      serviceDetailsEl.style.display = 'block';
+    }
+
+    // Seleção de um serviço/ator: evidencia o serviço, sua vela e TODAS as requisições/respostas ligadas a ele
+    function selectService(serviceName, serviceX) {
+      const normName = normalizeServiceName(serviceName);
+      selectedServiceName = normName;
+      currentSpan = null;
+
+      // 1. Atualiza lista lateral marcando todas as requisições deste serviço como selecionadas
+      renderSpansList();
+
+      // 2. Exibe o painel de resumo deste serviço
+      showServiceSummary(normName);
+
+      // 3. Destaca todas as setas, respostas e velas conectadas no diagrama SVG
+      highlightServiceCalls(normName, serviceX);
+
+      // 4. Sincroniza a rolagem da lista lateral para o primeiro span conectado
+      setTimeout(() => {
+        const firstSelectedItem = spansListEl.querySelector('.span-list-item.selected');
+        if (firstSelectedItem) {
+          firstSelectedItem.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
       }, 50);
     }
@@ -1001,6 +1109,110 @@ export class TraceWebviewPanel {
       });
     }
 
+    // Configura a interatividade em todos os cards de atores (superiores e inferiores) e suas velas verticais
+    function setupActorInteractivity(svg) {
+      const actorGroups = Array.from(svg.querySelectorAll('g.actor, .actor'));
+      const servicePositions = new Map(); // normName -> number (cx)
+
+      actorGroups.forEach(grp => {
+        const txt = grp.querySelector('text');
+        const rawName = txt ? txt.textContent : (grp.textContent || '');
+        const normName = normalizeServiceName(rawName);
+        if (!normName) return;
+
+        let cx = 0;
+        try {
+          const gbox = grp.getBBox();
+          cx = gbox.x + gbox.width / 2;
+          if (!servicePositions.has(normName)) {
+            servicePositions.set(normName, cx);
+          }
+        } catch {}
+
+        grp.style.cursor = 'pointer';
+        grp.setAttribute('title', 'Clique para evidenciar todas as requisições de: ' + normName);
+
+        const actorClickHandler = (e) => {
+          e.stopPropagation();
+          if (selectedServiceName === normName) {
+            clearSelection();
+          } else {
+            selectService(normName, cx);
+          }
+        };
+
+        grp.onclick = actorClickHandler;
+        grp.querySelectorAll('rect, text, circle, line, path').forEach(child => {
+          child.style.cursor = 'pointer';
+          child.onclick = actorClickHandler;
+        });
+      });
+
+      // Também vincula rects e texts soltos com classe actor (caso Mermaid os renderize fora de g)
+      const allActorEls = Array.from(svg.querySelectorAll('rect.actor, text.actor'));
+      allActorEls.forEach(el => {
+        el.style.cursor = 'pointer';
+        try {
+          const ebox = el.getBBox();
+          const ecx = ebox.x + ebox.width / 2;
+          let bestMatch = null;
+          let bestDist = Infinity;
+          servicePositions.forEach((cx, name) => {
+            const dist = Math.abs(cx - ecx);
+            if (dist < bestDist && dist <= 40) {
+              bestDist = dist;
+              bestMatch = name;
+            }
+          });
+          if (bestMatch) {
+            el.setAttribute('title', 'Clique para evidenciar o serviço: ' + bestMatch);
+            el.onclick = (e) => {
+              e.stopPropagation();
+              if (selectedServiceName === bestMatch) {
+                clearSelection();
+              } else {
+                selectService(bestMatch, ecx);
+              }
+            };
+          }
+        } catch {}
+      });
+
+      // Vincula clique também nas linhas verticais (velas) de cada serviço
+      const allLines = Array.from(svg.querySelectorAll('line'));
+      allLines.forEach(l => {
+        if (l.classList.contains('messageLine0') || l.classList.contains('messageLine1') || l.classList.contains('clickable-call-line')) return;
+        const lx1 = parseFloat(l.getAttribute('x1') || '0');
+        const lx2 = parseFloat(l.getAttribute('x2') || '0');
+        const ly1 = parseFloat(l.getAttribute('y1') || '0');
+        const ly2 = parseFloat(l.getAttribute('y2') || '0');
+        const isVertical = Math.abs(lx1 - lx2) <= 3 && Math.abs(ly2 - ly1) > 30;
+        if (isVertical) {
+          let bestMatch = null;
+          let bestDist = Infinity;
+          servicePositions.forEach((cx, name) => {
+            const dist = Math.abs(cx - lx1);
+            if (dist < bestDist && dist <= 25) {
+              bestDist = dist;
+              bestMatch = name;
+            }
+          });
+          if (bestMatch) {
+            l.style.cursor = 'pointer';
+            l.setAttribute('title', 'Clique para evidenciar a vela de: ' + bestMatch);
+            l.onclick = (e) => {
+              e.stopPropagation();
+              if (selectedServiceName === bestMatch) {
+                clearSelection();
+              } else {
+                selectService(bestMatch, lx1);
+              }
+            };
+          }
+        }
+      });
+    }
+
     // Configura áreas clicáveis no diagrama usando os identificadores numerados únicos (1), (2)...
     function setupDiagramClickInteractivity() {
       const svg = canvas.querySelector('svg');
@@ -1008,6 +1220,9 @@ export class TraceWebviewPanel {
 
       // Normaliza todas as velas de todos os serviços (selecionados e não selecionados)
       normalizeAllLifelines(svg);
+
+      // Configura interatividade nos cards dos atores (superiores, inferiores e velas)
+      setupActorInteractivity(svg);
 
       const allTexts = Array.from(svg.querySelectorAll('text'));
       const reqLines = Array.from(svg.querySelectorAll('.messageLine0'));
@@ -1048,7 +1263,11 @@ export class TraceWebviewPanel {
 
         const clickHandler = (e) => {
           e.stopPropagation();
-          selectSpan(span, index);
+          if (currentSpan && currentSpan.id === span.id) {
+            clearSelection();
+          } else {
+            selectSpan(span, index);
+          }
         };
 
         reqTextEl.classList.add('clickable-call-line');
@@ -1329,6 +1548,220 @@ export class TraceWebviewPanel {
         focusBox.setAttribute('class', 'svg-pair-focus-box');
         svg.appendChild(focusBox);
       }
+    }
+
+    // Destaca o serviço selecionado, sua vela vertical (top ao bottom) e TODAS as requisições e respostas conectadas
+    function highlightServiceCalls(normName, serviceX) {
+      const svg = canvas.querySelector('svg');
+      if (!svg) return;
+
+      // 1. Atenua todo o restante do diagrama e limpa destaques anteriores
+      svg.classList.add('diagram-dimmed');
+      clearSvgHighlights(svg);
+      normalizeAllLifelines(svg);
+
+      const allTexts = Array.from(svg.querySelectorAll('text'));
+      const reqLines = Array.from(svg.querySelectorAll('.messageLine0'));
+      const resLines = Array.from(svg.querySelectorAll('.messageLine1'));
+
+      // Mapeia parceiros que se comunicam com este serviço e se possuem algum erro
+      const connectedPartners = new Map(); // partnerName -> hasError
+
+      // 2. Destaca TODAS as chamadas conectadas ao serviço (Requests em Azul Neon, Responses em Verde/Vermelho)
+      spans.forEach((span, index) => {
+        const caller = normalizeServiceName(span.callerService);
+        const target = normalizeServiceName(span.targetService);
+        const isConnected = (caller === normName || target === normName);
+        if (!isConnected) return;
+
+        const partnerName = (caller === normName ? target : caller);
+        const isError = !!(span.response && span.response.statusCode >= 400);
+
+        if (!connectedPartners.has(partnerName)) {
+          connectedPartners.set(partnerName, isError);
+        } else if (isError) {
+          connectedPartners.set(partnerName, true);
+        }
+
+        const reqMarker = '(' + (index + 1) + ')';
+        const nextReqMarker = '(' + (index + 2) + ')';
+
+        const reqTextEl = allTexts.find(t => (t.textContent || '').includes(reqMarker));
+        if (reqTextEl) {
+          reqTextEl.classList.add('hl-request-text');
+          const reqBbox = reqTextEl.getBBox();
+          const nextReqTextEl = allTexts.find(t => (t.textContent || '').includes(nextReqMarker));
+          const nextReqY = nextReqTextEl ? nextReqTextEl.getBBox().y : Infinity;
+
+          const targetReqLine = reqLines.find(l => {
+            try {
+              const y = l.getBBox().y;
+              return y >= reqBbox.y - 8 && y < nextReqY;
+            } catch {
+              return false;
+            }
+          }) || reqLines[index];
+
+          if (targetReqLine) {
+            targetReqLine.classList.add('hl-request-line');
+          }
+
+          if (span.response) {
+            const startY = targetReqLine ? (targetReqLine.getBBox ? targetReqLine.getBBox().y : reqBbox.y) : reqBbox.y;
+            const resTextEl = allTexts.find(t => {
+              try {
+                const y = t.getBBox().y;
+                return y > reqBbox.y + 10 && y < nextReqY;
+              } catch {
+                return false;
+              }
+            });
+
+            if (resTextEl) {
+              resTextEl.classList.add(isError ? 'hl-response-error-text' : 'hl-response-success-text');
+            }
+
+            const targetResLine = resLines.find(l => {
+              try {
+                const y = l.getBBox().y;
+                return y > startY && y < nextReqY;
+              } catch {
+                return false;
+              }
+            }) || resLines[index];
+
+            if (targetResLine) {
+              targetResLine.classList.add(isError ? 'hl-response-error-line' : 'hl-response-success-line');
+            }
+          }
+        }
+      });
+
+      // 3. Destaca as velas (lifelines) e cartões (superiores e inferiores) do serviço e de seus parceiros
+      const allActorGroups = Array.from(svg.querySelectorAll('g.actor, .actor'));
+      const allLines = Array.from(svg.querySelectorAll('line'));
+
+      const targetPositions = new Map(); // normName -> { x: number, isMain: boolean, isError: boolean }
+
+      allActorGroups.forEach(grp => {
+        const txt = grp.querySelector('text');
+        const rawName = txt ? txt.textContent : (grp.textContent || '');
+        const name = normalizeServiceName(rawName);
+        if (!name) return;
+
+        try {
+          const gbox = grp.getBBox();
+          const cx = gbox.x + gbox.width / 2;
+          if (name === normName) {
+            targetPositions.set(name, { x: cx, isMain: true, isError: false });
+          } else if (connectedPartners.has(name)) {
+            targetPositions.set(name, { x: cx, isMain: false, isError: connectedPartners.get(name) });
+          }
+        } catch {}
+      });
+
+      // Fallback para serviceX caso a posição não tenha sido detectada pelo nome
+      if (!targetPositions.has(normName) && typeof serviceX === 'number' && serviceX > 0) {
+        targetPositions.set(normName, { x: serviceX, isMain: true, isError: false });
+      }
+
+      // Destaca as velas verticais de todos os participantes envolvidos
+      allLines.forEach(l => {
+        if (l.classList.contains('messageLine0') || l.classList.contains('messageLine1') || l.classList.contains('hl-request-line') || l.classList.contains('hl-response-success-line') || l.classList.contains('hl-response-error-line')) return;
+
+        const lx1 = parseFloat(l.getAttribute('x1') || '0');
+        const lx2 = parseFloat(l.getAttribute('x2') || '0');
+        const ly1 = parseFloat(l.getAttribute('y1') || '0');
+        const ly2 = parseFloat(l.getAttribute('y2') || '0');
+        const isVertical = Math.abs(lx1 - lx2) <= 3 && Math.abs(ly2 - ly1) > 30;
+        const isActorLine = (l.getAttribute('class') || '').includes('actor-line') || isVertical;
+
+        if (isActorLine) {
+          targetPositions.forEach((info) => {
+            if (Math.abs(lx1 - info.x) <= 16) {
+              if (info.isMain) {
+                l.classList.add('hl-lifeline-caller');
+              } else {
+                l.classList.add(info.isError ? 'hl-lifeline-target-error' : 'hl-lifeline-target-success');
+              }
+            }
+          });
+        }
+      });
+
+      // Destaca todos os cards (superiores e inferiores)
+      allActorGroups.forEach(grp => {
+        try {
+          const gbox = grp.getBBox();
+          const gxCenter = gbox.x + gbox.width / 2;
+
+          targetPositions.forEach((info) => {
+            if (Math.abs(gxCenter - info.x) <= 35) {
+              if (info.isMain) {
+                grp.classList.add('hl-actor-group-caller');
+              } else {
+                grp.classList.add(info.isError ? 'hl-actor-group-target-error' : 'hl-actor-group-target-success');
+              }
+
+              const txt = grp.querySelector('text');
+              if (txt) {
+                grp.appendChild(txt); // Mantém o texto sempre na frente sem sobreposição
+                if (info.isMain) {
+                  txt.classList.add('hl-actor-text-caller');
+                } else {
+                  txt.classList.add(info.isError ? 'hl-actor-text-target-error' : 'hl-actor-text-target-success');
+                }
+              }
+
+              const rect = grp.querySelector('rect');
+              if (rect) {
+                if (info.isMain) {
+                  rect.classList.add('hl-actor-box-caller');
+                } else {
+                  rect.classList.add(info.isError ? 'hl-actor-box-target-error' : 'hl-actor-box-target-success');
+                }
+              }
+            }
+          });
+        } catch {}
+      });
+
+      // Fallback para rects soltos (caso renderizados fora do grupo)
+      const allRects = Array.from(svg.querySelectorAll('rect'));
+      allRects.forEach(rect => {
+        if (rect.classList.contains('svg-pair-focus-box') || rect.classList.contains('clickable-hitbox')) return;
+        try {
+          const rbox = rect.getBBox();
+          const rxCenter = rbox.x + rbox.width / 2;
+          targetPositions.forEach((info) => {
+            if (Math.abs(rxCenter - info.x) <= 25) {
+              if (info.isMain) {
+                rect.classList.add('hl-actor-box-caller');
+              } else {
+                rect.classList.add(info.isError ? 'hl-actor-box-target-error' : 'hl-actor-box-target-success');
+              }
+            }
+          });
+        } catch {}
+      });
+
+      // Fallback para legendas de texto soltas
+      allTexts.forEach(txt => {
+        if (txt.classList.contains('messageText') || txt.classList.contains('clickable-call-line')) return;
+        try {
+          const tbox = txt.getBBox();
+          const txCenter = tbox.x + tbox.width / 2;
+          targetPositions.forEach((info) => {
+            if (Math.abs(txCenter - info.x) <= 35) {
+              if (info.isMain) {
+                txt.classList.add('hl-actor-text-caller');
+              } else {
+                txt.classList.add(info.isError ? 'hl-actor-text-target-error' : 'hl-actor-text-target-success');
+              }
+            }
+          });
+        } catch {}
+      });
     }
 
     const copyBtn = document.getElementById('copy-curl-btn');
