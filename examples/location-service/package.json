@@ -1,0 +1,17 @@
+{
+  "name": "location-insights-service",
+  "version": "1.0.0",
+  "description": "API de exemplo multi-serviços para demonstrar o FlowTracer",
+  "main": "server.ts",
+  "scripts": {
+    "start": "ts-node server.ts"
+  },
+  "dependencies": {
+    "undici": "^6.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}

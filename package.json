@@ -1,0 +1,127 @@
+{
+  "name": "flow-tracer",
+  "displayName": "FlowTracer - API Sequence Visualizer",
+  "description": "Intercepta, mapeia e visualiza fluxos de chamadas HTTP distribuídas em diagramas de sequência.",
+  "version": "0.1.0",
+  "publisher": "observability-tools",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/flowtracer/flow-tracer"
+  },
+  "bugs": {
+    "url": "https://github.com/flowtracer/flow-tracer/issues"
+  },
+  "homepage": "https://github.com/flowtracer/flow-tracer#readme",
+  "keywords": [
+    "tracing",
+    "sequence-diagram",
+    "mermaid",
+    "http",
+    "proxy",
+    "curl",
+    "observability",
+    "rest-api",
+    "network",
+    "devtools"
+  ],
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Debuggers",
+    "Visualization",
+    "Other"
+  ],
+  "activationEvents": [
+    "onView:flowTracer.views.transactions"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "flowTracer",
+          "title": "FlowTracer",
+          "icon": "$(pulse)"
+        }
+      ]
+    },
+    "views": {
+      "flowTracer": [
+        {
+          "id": "flowTracer.views.transactions",
+          "name": "Requisições Interceptadas",
+          "type": "tree"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "flowTracer.clearHistory",
+        "title": "Limpar Histórico",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "flowTracer.toggleCapture",
+        "title": "Pausar/Retomar Captura",
+        "icon": "$(debug-pause)"
+      },
+      {
+        "command": "flowTracer.openDiagram",
+        "title": "Abrir Diagrama de Sequência",
+        "icon": "$(type-hierarchy)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "flowTracer.toggleCapture",
+          "when": "view == flowTracer.views.transactions",
+          "group": "navigation@1"
+        },
+        {
+          "command": "flowTracer.clearHistory",
+          "when": "view == flowTracer.views.transactions",
+          "group": "navigation@2"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "flowTracer.openDiagram",
+          "when": "view == flowTracer.views.transactions",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "FlowTracer Configuration",
+      "properties": {
+        "flowTracer.proxyPort": {
+          "type": "number",
+          "default": 9090,
+          "description": "Porta do servidor proxy HTTP interceptador local."
+        },
+        "flowTracer.maxHistory": {
+          "type": "number",
+          "default": 200,
+          "description": "Número máximo de transações mantidas em memória."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package",
+    "demo:api": "node examples/location-service/server.js"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^2.24.0",
+    "typescript": "^5.3.3"
+  }
+}
