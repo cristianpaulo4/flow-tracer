@@ -3,7 +3,7 @@
   "displayName": "FlowTracer - API Sequence Visualizer",
   "description": "Intercepta, mapeia e visualiza fluxos de chamadas HTTP distribuídas em diagramas de sequência.",
   "version": "1.0.0",
-  "publisher": "observability-tools",
+  "publisher": "cristianpaulo4",
   "license": "MIT",
   "icon": "images/icon.png",
   "repository": {
