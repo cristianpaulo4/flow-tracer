@@ -2,7 +2,7 @@
   "name": "flow-tracer",
   "displayName": "FlowTracer - API Sequence Visualizer",
   "description": "Intercepta, mapeia e visualiza fluxos de chamadas HTTP distribuídas em diagramas de sequência.",
-  "version": "1.0.0",
+  "version": "1.0.3",
   "publisher": "cristianpaulo4",
   "license": "MIT",
   "icon": "images/icon.png",
@@ -59,14 +59,24 @@
     },
     "commands": [
       {
+        "command": "flowTracer.startProxy",
+        "title": "Iniciar Interceptor (Play)",
+        "icon": "$(play)"
+      },
+      {
+        "command": "flowTracer.stopProxy",
+        "title": "Parar Interceptor (Stop)",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "flowTracer.configurePorts",
+        "title": "Configurar Portas (In / Out)",
+        "icon": "$(gear)"
+      },
+      {
         "command": "flowTracer.clearHistory",
         "title": "Limpar Histórico",
         "icon": "$(trash)"
-      },
-      {
-        "command": "flowTracer.toggleCapture",
-        "title": "Pausar/Retomar Captura",
-        "icon": "$(debug-pause)"
       },
       {
         "command": "flowTracer.openDiagram",
@@ -77,7 +87,17 @@
     "menus": {
       "view/title": [
         {
-          "command": "flowTracer.toggleCapture",
+          "command": "flowTracer.startProxy",
+          "when": "view == flowTracer.views.transactions && !flowTracer.proxyRunning",
+          "group": "navigation@0"
+        },
+        {
+          "command": "flowTracer.stopProxy",
+          "when": "view == flowTracer.views.transactions && flowTracer.proxyRunning",
+          "group": "navigation@0"
+        },
+        {
+          "command": "flowTracer.configurePorts",
           "when": "view == flowTracer.views.transactions",
           "group": "navigation@1"
         },
@@ -98,10 +118,25 @@
     "configuration": {
       "title": "FlowTracer Configuration",
       "properties": {
+        "flowTracer.inPort": {
+          "type": "number",
+          "default": 9090,
+          "description": "Porta de Entrada (In): onde o FlowTracer escuta (Swagger, Postman, etc.)."
+        },
+        "flowTracer.targetPort": {
+          "type": "number",
+          "default": 3000,
+          "description": "Porta de Destino (Out): onde a sua aplicação API realmente roda."
+        },
+        "flowTracer.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "description": "Iniciar o interceptor automaticamente ao abrir a extensão."
+        },
         "flowTracer.proxyPort": {
           "type": "number",
           "default": 9090,
-          "description": "Porta do servidor proxy HTTP interceptador local."
+          "description": "Legado: mantido para compatibilidade com inPort."
         },
         "flowTracer.maxHistory": {
           "type": "number",

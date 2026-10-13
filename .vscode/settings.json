@@ -1,0 +1,4 @@
+{
+  "flowTracer.inPort": 9090,
+  "flowTracer.targetPort": 3000
+}

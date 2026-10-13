@@ -3,7 +3,7 @@ import * as https from 'https';
 import * as crypto from 'crypto';
 import { URL } from 'url';
 
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
 const PROXY_URL = process.env.HTTP_PROXY || 'http://localhost:9090';
 
 /**

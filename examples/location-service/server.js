@@ -1,22 +1,22 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function (o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
     if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
+        desc = { enumerable: true, get: function () { return m[k]; } };
     }
     Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
+}) : (function (o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     o[k2] = m[k];
 }));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function (o, v) {
     Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
+}) : function (o, v) {
     o["default"] = v;
 });
 var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
+    var ownKeys = function (o) {
         ownKeys = Object.getOwnPropertyNames || function (o) {
             var ar = [];
             for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
@@ -37,18 +37,56 @@ const http = __importStar(require("http"));
 const https = __importStar(require("https"));
 const crypto = __importStar(require("crypto"));
 const url_1 = require("url");
-const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
-const PROXY_URL = process.env.HTTP_PROXY || 'http://localhost:9090';
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3001;
+let currentPort = PORT;
+let discoveredFlowTracerPort = 3005;
+
+async function detectFlowTracerPort() {
+    if (process.env.FLOWTRACER_PORT) {
+        discoveredFlowTracerPort = parseInt(process.env.FLOWTRACER_PORT, 10);
+        return discoveredFlowTracerPort;
+    }
+    const candidatePorts = [3005, 9090, 9091, 9092, 9093, 9094];
+    for (const p of candidatePorts) {
+        const ok = await new Promise((resolve) => {
+            const req = http.get(`http://127.0.0.1:${p}/__flowtracer/ping`, { timeout: 100 }, (res) => {
+                let data = '';
+                res.on('data', (c) => (data += c));
+                res.on('end', () => {
+                    try {
+                        const json = JSON.parse(data);
+                        resolve(json.app === 'flowtracer');
+                    } catch {
+                        resolve(false);
+                    }
+                });
+            });
+            req.on('error', () => resolve(false));
+            req.on('timeout', () => {
+                req.destroy();
+                resolve(false);
+            });
+        });
+        if (ok) {
+            discoveredFlowTracerPort = p;
+            return p;
+        }
+    }
+    return discoveredFlowTracerPort || 9090;
+}
+
+detectFlowTracerPort().catch(() => { });
+
 /**
  * Notifica o FlowTracer sobre um span (para registrar chamadas na timeline/diagrama).
  */
-function sendSpanToFlowTracer(span) {
+function sendSpanToFlowTracer(span, targetPort) {
     try {
-        const proxy = new url_1.URL(PROXY_URL);
+        const portToSend = targetPort || discoveredFlowTracerPort || 3005;
         const data = JSON.stringify(span);
         const req = http.request({
-            hostname: proxy.hostname,
-            port: proxy.port ? parseInt(proxy.port, 10) : 9090,
+            hostname: '127.0.0.1',
+            port: portToSend,
             path: '/__flowtracer/span',
             method: 'POST',
             headers: {
@@ -56,9 +94,7 @@ function sendSpanToFlowTracer(span) {
                 'Content-Length': Buffer.byteLength(data)
             }
         });
-        req.on('error', () => {
-            // Silencia se o proxy não estiver aberto no momento
-        });
+        req.on('error', () => { });
         req.write(data);
         req.end();
     }
@@ -90,11 +126,11 @@ async function fetchWithTracing(targetUrl, parentTraceContext) {
     };
     try {
         // Tenta enviar via Proxy HTTP do FlowTracer
-        const proxy = new url_1.URL(PROXY_URL);
+        const proxyPort = discoveredFlowTracerPort || 3005;
         const proxyRes = await new Promise((resolve, reject) => {
             const req = http.request({
-                hostname: proxy.hostname,
-                port: proxy.port ? parseInt(proxy.port, 10) : 9090,
+                hostname: '127.0.0.1',
+                port: proxyPort,
                 path: targetUrl,
                 method: 'GET',
                 headers: {
@@ -169,7 +205,7 @@ function makeDirectRequest(parsedTarget, headers, startTime, traceId, parentSpan
                         id: spanId,
                         traceId,
                         parentId: parentSpanId,
-                        callerService: `localhost:${PORT}`,
+                        callerService: `localhost:${currentPort}`,
                         targetService: parsedTarget.host,
                         request: {
                             method: 'GET',
@@ -184,7 +220,7 @@ function makeDirectRequest(parsedTarget, headers, startTime, traceId, parentSpan
                             durationMs,
                             timestamp: Date.now()
                         }
-                    });
+                    }, discoveredFlowTracerPort);
                 }
                 resolve({
                     status: res.statusCode || 500,
@@ -200,19 +236,25 @@ function makeDirectRequest(parsedTarget, headers, startTime, traceId, parentSpan
         req.end();
     });
 }
+
 // -------------------------------------------------------------
 // Servidor HTTP Principal
 // -------------------------------------------------------------
-const server = http.createServer(async (req, res) => {
+async function handleRequest(req, res) {
+    if (req.headers['x-flowtracer-port']) {
+        discoveredFlowTracerPort = parseInt(req.headers['x-flowtracer-port'], 10);
+    } else {
+        await detectFlowTracerPort();
+    }
     const startTime = Date.now();
-    const urlObj = new url_1.URL(req.url || '/', `http://${req.headers.host || `localhost:${PORT}`}`);
+    const urlObj = new url_1.URL(req.url || '/', `http://${req.headers.host || `localhost:${currentPort}`}`);
     // Endpoint: /api/cep/:cep
     const cepMatch = urlObj.pathname.match(/^\/api\/cep\/([0-9]{5}-?[0-9]{3})$/);
     if (!cepMatch) {
         res.writeHead(404, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
             error: 'Endpoint não encontrado.',
-            usage: `GET http://localhost:${PORT}/api/cep/01001000`
+            usage: `GET http://localhost:${currentPort}/api/cep/01001000`
         }));
         return;
     }
@@ -383,10 +425,10 @@ const server = http.createServer(async (req, res) => {
             id: rootSpanId,
             traceId,
             callerService: 'Client',
-            targetService: `localhost:${PORT}`,
+            targetService: `localhost:${currentPort}`,
             request: {
                 method: 'GET',
-                url: `http://localhost:${PORT}${req.url}`,
+                url: `http://localhost:${currentPort}${req.url}`,
                 headers: req.headers,
                 timestamp: startTime
             },
@@ -409,16 +451,34 @@ const server = http.createServer(async (req, res) => {
             id: rootSpanId,
             traceId,
             callerService: 'Client',
-            targetService: `localhost:${PORT}`,
-            request: { method: 'GET', url: `http://localhost:${PORT}${req.url}`, headers: req.headers, timestamp: startTime },
+            targetService: `localhost:${currentPort}`,
+            request: { method: 'GET', url: `http://localhost:${currentPort}${req.url}`, headers: req.headers, timestamp: startTime },
             response: { statusCode: 500, headers: {}, body: errJson, durationMs: Date.now() - startTime, timestamp: Date.now() }
         });
     }
-});
-server.listen(PORT, () => {
-    console.log(`\n=======================================================`);
-    console.log(`🚀 Location Insights API rodando em http://localhost:${PORT}`);
-    console.log(`📡 Conectado ao FlowTracer em: ${PROXY_URL}`);
-    console.log(`👉 Teste: http://localhost:${PORT}/api/cep/01001000`);
-    console.log(`=======================================================\n`);
-});
+}
+
+function startServer(portToTry) {
+    const srv = http.createServer(handleRequest);
+
+    srv.once('error', (err) => {
+        if (err.code === 'EADDRINUSE') {
+            const nextPort = portToTry + 1;
+            console.log(`⚠️  Porta ${portToTry} ocupada. Tentando automaticamente a porta ${nextPort}...`);
+            startServer(nextPort);
+        } else {
+            console.error('Erro ao iniciar servidor:', err);
+        }
+    });
+
+    srv.listen(portToTry, () => {
+        currentPort = portToTry;
+        console.log(`\n=======================================================`);
+        console.log(`🚀 Location Insights API rodando em http://localhost:${currentPort}`);
+        console.log(`📡 Conectado ao FlowTracer em: http://localhost:${discoveredFlowTracerPort}`);
+        console.log(`👉 Teste: http://localhost:${currentPort}/api/cep/01001000`);
+        console.log(`=======================================================\n`);
+    });
+}
+
+startServer(PORT);

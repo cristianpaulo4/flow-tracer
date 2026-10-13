@@ -37,7 +37,6 @@ exports.TraceManager = void 0;
 const vscode = __importStar(require("vscode"));
 class TraceManager {
     transactions = new Map();
-    isCaptureActive = true;
     maxHistory = 200;
     _onTransactionsUpdated = new vscode.EventEmitter();
     onTransactionsUpdated = this._onTransactionsUpdated.event;
@@ -45,21 +44,11 @@ class TraceManager {
         const config = vscode.workspace.getConfiguration('flowTracer');
         this.maxHistory = config.get('maxHistory', 200);
     }
-    isCapturing() {
-        return this.isCaptureActive;
-    }
-    toggleCapture() {
-        this.isCaptureActive = !this.isCaptureActive;
-        return this.isCaptureActive;
-    }
     clearHistory() {
         this.transactions.clear();
         this._onTransactionsUpdated.fire();
     }
     recordSpan(span) {
-        if (!this.isCaptureActive) {
-            return;
-        }
         let transaction = this.transactions.get(span.traceId);
         const isRootSpan = !span.parentId;
         let pathname = '/';

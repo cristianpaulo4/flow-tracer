@@ -3,7 +3,6 @@ import { TraceSpan, TraceTransaction } from '../models/transaction';
 
 export class TraceManager {
     private transactions: Map<string, TraceTransaction> = new Map();
-    private isCaptureActive: boolean = true;
     private maxHistory: number = 200;
 
     private _onTransactionsUpdated = new vscode.EventEmitter<void>();
@@ -14,24 +13,12 @@ export class TraceManager {
         this.maxHistory = config.get<number>('maxHistory', 200);
     }
 
-    public isCapturing(): boolean {
-        return this.isCaptureActive;
-    }
-
-    public toggleCapture(): boolean {
-        this.isCaptureActive = !this.isCaptureActive;
-        return this.isCaptureActive;
-    }
-
     public clearHistory(): void {
         this.transactions.clear();
         this._onTransactionsUpdated.fire();
     }
 
     public recordSpan(span: TraceSpan): void {
-        if (!this.isCaptureActive) {
-            return;
-        }
 
         let transaction = this.transactions.get(span.traceId);
         const isRootSpan = !span.parentId;

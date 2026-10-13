@@ -7,23 +7,65 @@ import { TraceSpan } from '../models/transaction';
 export class ProxyServer {
     private server?: http.Server;
     private isRunning = false;
+    private currentPort: number;
 
     constructor(
         private readonly traceManager: TraceManager,
-        private readonly port: number = 9090
-    ) { }
+        private port: number = 9090,
+        private targetPort: number = 3000
+    ) {
+        this.currentPort = port;
+    }
 
-    public start(): Promise<void> {
-        return new Promise((resolve, reject) => {
-            this.server = http.createServer((clientReq, clientRes) => this.handleRequest(clientReq, clientRes));
+    public setPorts(inPort: number, targetPort: number): void {
+        this.port = inPort;
+        this.currentPort = inPort;
+        this.targetPort = targetPort;
+    }
 
-            this.server.listen(this.port, () => {
+    public getTargetPort(): number {
+        return this.targetPort;
+    }
+
+    public async start(): Promise<number> {
+        let attemptPort = this.port;
+        const maxAttempts = 10;
+
+        for (let i = 0; i < maxAttempts; i++) {
+            try {
+                await this.listenOnPort(attemptPort);
+                this.currentPort = attemptPort;
                 this.isRunning = true;
-                resolve();
-            });
+                return this.currentPort;
+            } catch (err: any) {
+                if (err.code === 'EADDRINUSE' && i < maxAttempts - 1) {
+                    attemptPort++;
+                    continue;
+                }
+                throw err;
+            }
+        }
+        throw new Error(`Não foi possível iniciar o proxy após testar ${maxAttempts} portas a partir de ${this.port}.`);
+    }
 
-            this.server.on('error', (err) => {
+    private listenOnPort(port: number): Promise<void> {
+        return new Promise((resolve, reject) => {
+            const server = http.createServer((clientReq, clientRes) => this.handleRequest(clientReq, clientRes));
+
+            const onError = (err: any) => {
+                server.removeAllListeners();
                 reject(err);
+            };
+
+            server.once('error', onError);
+
+            server.listen(port, () => {
+                server.removeListener('error', onError);
+                this.server = server;
+                server.on('error', (err) => {
+                    console.error('FlowTracer Proxy Runtime Error:', err);
+                });
+                resolve();
             });
         });
     }
@@ -42,7 +84,7 @@ export class ProxyServer {
     }
 
     public getPort(): number {
-        return this.port;
+        return this.currentPort;
     }
 
     public getIsRunning(): boolean {
@@ -52,7 +94,17 @@ export class ProxyServer {
     private handleRequest(clientReq: http.IncomingMessage, clientRes: http.ServerResponse): void {
         const requestUrl = clientReq.url || '/';
 
-        // 1. Endpoint Interno de Ingestão de Spans
+        // 1. Endpoint Interno de Ping / Health Check
+        if (requestUrl === '/__flowtracer/ping' || requestUrl === '/__flowtracer/health') {
+            clientRes.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Access-Control-Allow-Origin': '*'
+            });
+            clientRes.end(JSON.stringify({ status: 'ok', app: 'flowtracer', inPort: this.currentPort, targetPort: this.targetPort }));
+            return;
+        }
+
+        // 2. Endpoint Interno de Ingestão de Spans
         if (requestUrl === '/__flowtracer/span' && clientReq.method === 'POST') {
             const chunks: Buffer[] = [];
             clientReq.on('data', (c) => chunks.push(c));
@@ -70,14 +122,21 @@ export class ProxyServer {
             return;
         }
 
-        if (!this.traceManager.isCapturing()) {
-            this.forwardDirectly(clientReq, clientRes);
+        // 3. Suporte Completo a CORS Preflight (Essencial para requisições disparadas pelo Swagger no navegador)
+        if (clientReq.method === 'OPTIONS') {
+            clientRes.writeHead(204, {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD',
+                'Access-Control-Allow-Headers': '*',
+                'Access-Control-Max-Age': '86400'
+            });
+            clientRes.end();
             return;
         }
 
         const startTime = Date.now();
 
-        // 2. Resolução do Contexto Distribuído (W3C Trace Context)
+        // 4. Resolução do Contexto Distribuído (W3C Trace Context)
         const traceparent = (clientReq.headers['traceparent'] as string) || '';
         let traceId = '';
         let parentId: string | undefined;
@@ -125,10 +184,24 @@ export class ProxyServer {
             }
         }
 
-        const callerService = parentId ? 'API (localhost:3000)' : 'Client';
-        const targetService = targetHostname;
+        // 5. Modo Gateway Reverso Inteligente:
+        // Se a chamada veio direto para a porta do proxy (ex: Swagger ou Postman chamando http://localhost:9090/api/...)
+        const isCallingProxyDirectly = (targetHostname === 'localhost' || targetHostname === '127.0.0.1') && targetPort === this.currentPort;
+        if (isCallingProxyDirectly) {
+            // Redireciona para o backend local (porta de destino configurada ou especificada no header x-target-port)
+            const backendPort = clientReq.headers['x-target-port']
+                ? parseInt(clientReq.headers['x-target-port'] as string, 10)
+                : this.targetPort;
+            targetHostname = 'localhost';
+            targetPort = backendPort;
+        }
 
-        // 3. Bufferização do Body de Envio
+        const callerService = parentId ? `API (localhost:${this.targetPort})` : 'Client';
+        const targetService = targetHostname === 'localhost' || targetHostname === '127.0.0.1'
+            ? `API (localhost:${targetPort})`
+            : targetHostname;
+
+        // 5. Bufferização do Body de Envio
         const reqChunks: Buffer[] = [];
         clientReq.on('data', (chunk) => reqChunks.push(chunk));
 
@@ -143,7 +216,7 @@ export class ProxyServer {
                 targetService,
                 request: {
                     method: clientReq.method || 'GET',
-                    url: `${isHttps ? 'https' : 'http'}://${targetHostname}${targetPath}`,
+                    url: `${isHttps ? 'https' : 'http'}://${targetHostname}:${targetPort}${targetPath}`,
                     headers: { ...clientReq.headers },
                     body: reqBody || undefined,
                     timestamp: startTime
@@ -153,7 +226,8 @@ export class ProxyServer {
             // Injeta o cabeçalho W3C com o span atual e sanitiza headers para evitar compressão ilegível
             const headersToForward = { ...clientReq.headers };
             headersToForward['traceparent'] = `00-${traceId}-${currentSpanId}-01`;
-            headersToForward['host'] = targetHostname;
+            headersToForward['x-flowtracer-port'] = this.currentPort.toString();
+            headersToForward['host'] = `${targetHostname}:${targetPort}`;
             delete headersToForward['accept-encoding']; // Solicita resposta em texto plano/json descompactado
 
             const clientModule = isHttps ? https : http;
@@ -169,7 +243,13 @@ export class ProxyServer {
                 },
                 (proxyRes) => {
                     const resChunks: Buffer[] = [];
-                    clientRes.writeHead(proxyRes.statusCode || 500, proxyRes.headers);
+                    // Adiciona CORS nos headers de resposta para o Swagger funcionar perfeitamente no navegador
+                    const resHeaders = { ...proxyRes.headers };
+                    resHeaders['access-control-allow-origin'] = '*';
+                    resHeaders['access-control-allow-methods'] = 'GET, POST, PUT, DELETE, PATCH, OPTIONS, HEAD';
+                    resHeaders['access-control-allow-headers'] = '*';
+
+                    clientRes.writeHead(proxyRes.statusCode || 500, resHeaders);
 
                     proxyRes.on('data', (chunk) => {
                         resChunks.push(chunk);
@@ -213,32 +293,5 @@ export class ProxyServer {
             }
             proxyReq.end();
         });
-    }
-
-    private forwardDirectly(req: http.IncomingMessage, res: http.ServerResponse): void {
-        const hostHeader = (req.headers['host'] as string) || 'localhost';
-        const [targetHostname, targetPortStr] = hostHeader.split(':');
-        const targetPort = targetPortStr ? parseInt(targetPortStr, 10) : 80;
-
-        const proxyReq = http.request(
-            {
-                hostname: targetHostname,
-                port: targetPort,
-                path: req.url,
-                method: req.method,
-                headers: req.headers
-            },
-            (proxyRes) => {
-                res.writeHead(proxyRes.statusCode || 500, proxyRes.headers);
-                proxyRes.pipe(res);
-            }
-        );
-
-        proxyReq.on('error', (err) => {
-            res.writeHead(502);
-            res.end(`Proxy Error: ${err.message}`);
-        });
-
-        req.pipe(proxyReq);
     }
 }
