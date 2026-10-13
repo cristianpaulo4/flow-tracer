@@ -1,0 +1,20 @@
+# Dependências
+node_modules/
+
+# Build e compilação
+out/
+dist/
+
+# Pacotes e artefatos de extensão VS Code
+*.vsix
+
+# Logs e depuração
+*.log
+npm-debug.log*
+
+# Testes de extensão VS Code
+.vscode-test/
+
+# Sistema operacional
+.DS_Store
+Thumbs.db

@@ -115,7 +115,10 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "package": "vsce package",
+    "build:package": "node --experimental-require-module ./node_modules/@vscode/vsce/vsce package --no-git-tag-version",
+    "package": "npm run build:package",
+    "deploy:vsce": "node --experimental-require-module ./node_modules/@vscode/vsce/vsce publish",
+    "deploy:ovsx": "npx ovsx publish",
     "demo:api": "node examples/location-service/server.js"
   },
   "devDependencies": {
